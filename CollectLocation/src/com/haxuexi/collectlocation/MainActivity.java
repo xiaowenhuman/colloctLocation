@@ -156,7 +156,7 @@ public class MainActivity extends ActionBarActivity {
 		public void onLocationChanged(Location location) {
 			 Log.v(TAG, "经纬度：" + location.getLatitude() + "   " + location.getLongitude());
 			 displayTextView.setText("经纬度：" + location.getLatitude() + "   " + location.getLongitude());
-			 Toast.makeText(MainActivity.this, "位置改变了::::::::::::", 3000).show();
+			 Toast.makeText(MainActivity.this, "位置改变了::::::::::::" + locationDatas.size(), 3000).show();
 			locationDatas.add(new LocationData(location.getLatitude(), location
 					.getLongitude(), new   java.util.Date()));
 		}
