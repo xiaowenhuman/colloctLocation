@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">CollectLocation</string>
+    <string name="hello_world">Hello world!</string>
+    <string name="collectLocation">采集位置信息</string>
+    <string name="stopCollectLocation">停止采集位置信息</string>
+    <string name="action_settings">Settings</string>
+    <string name="status_bar_string">点击监控程序放到前台</string>
+    <string name="back_app_name">监控程序台</string>
+
+</resources>
