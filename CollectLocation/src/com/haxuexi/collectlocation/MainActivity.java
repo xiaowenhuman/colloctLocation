@@ -1,6 +1,10 @@
 package com.haxuexi.collectlocation;
 
 
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.List;
+
 import android.support.v7.app.ActionBarActivity;
 import android.app.Notification;
 import android.app.NotificationManager;
@@ -29,6 +33,8 @@ public class MainActivity extends ActionBarActivity {
 
 	private TextView displayTextView = null;
     private LocationManager locationManager = null;
+    
+    List<LocationData> locationDatas = new ArrayList<LocationData>();
 	
 	private static final String TAG = "MainActivity";
 	@Override
@@ -151,6 +157,8 @@ public class MainActivity extends ActionBarActivity {
 			 Log.v(TAG, "经纬度：" + location.getLatitude() + "   " + location.getLongitude());
 			 displayTextView.setText("经纬度：" + location.getLatitude() + "   " + location.getLongitude());
 			 Toast.makeText(MainActivity.this, "位置改变了::::::::::::", 3000).show();
+			locationDatas.add(new LocationData(location.getLatitude(), location
+					.getLongitude(), new   java.util.Date()));
 		}
 	};
 	private void showNotification() {
