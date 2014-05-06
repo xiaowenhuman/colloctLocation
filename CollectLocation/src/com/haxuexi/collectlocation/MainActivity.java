@@ -1,9 +1,28 @@
 package com.haxuexi.collectlocation;
 
 
-import java.text.SimpleDateFormat;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpResponse;
+import org.apache.http.client.ClientProtocolException;
+import org.apache.http.client.entity.UrlEncodedFormEntity;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.message.BasicNameValuePair;
+import org.apache.http.protocol.HTTP;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import android.support.v7.app.ActionBarActivity;
 import android.app.Notification;
@@ -18,6 +37,7 @@ import android.location.LocationListener;
 import android.location.LocationManager;
 import android.location.LocationProvider;
 import android.os.Bundle;
+import android.os.Handler;
 import android.util.Log;
 import android.view.View;
 import android.view.View.OnClickListener;
@@ -34,7 +54,10 @@ public class MainActivity extends ActionBarActivity {
 	private TextView displayTextView = null;
     private LocationManager locationManager = null;
     
-    List<LocationData> locationDatas = new ArrayList<LocationData>();
+    JSONArray jsonArray = new JSONArray();
+    private static final String URL_PATH = "http://192.168.1.100:8080/Track/isLoginCheck.do";
+    
+    private static final int SAVE_DATE_LENGTH = 5;
 	
 	private static final String TAG = "MainActivity";
 	@Override
@@ -46,7 +69,7 @@ public class MainActivity extends ActionBarActivity {
 		// 获取位置管理服务
 		locationManager = (LocationManager) getSystemService(serviceName); 
        
-		openGPSSettings();
+//		openGPSSettings();
 		
 		collectLocationBtnButton = (Button)findViewById(R.id.collectLocation);
 		stopCollectLocationBtn = (Button)findViewById(R.id.stopCollectLocation);
@@ -59,9 +82,9 @@ public class MainActivity extends ActionBarActivity {
 
 		       LocationProvider gpslLocationProvider =  locationManager.getProvider(LocationManager.GPS_PROVIDER);
 		       String providerName = null;
-		        if (gpslLocationProvider != null) {
-		        	providerName = LocationManager.GPS_PROVIDER;
-				} else {
+//		        if (gpslLocationProvider != null) {
+//		        	providerName = LocationManager.GPS_PROVIDER;
+//				} else {
 			        // 查找到服务信息  
 			        Criteria criteria = new Criteria();  
 			        criteria.setAccuracy(Criteria.ACCURACY_FINE); // 高精度  
@@ -71,11 +94,11 @@ public class MainActivity extends ActionBarActivity {
 			        criteria.setPowerRequirement(Criteria.POWER_LOW); // 低功耗  
 			  
 			        providerName = locationManager.getBestProvider(criteria, true); // 获取GPS信息  
-				}
-
+//				}
+			    
 		        Location location = locationManager.getLastKnownLocation(providerName);
 		        
-		        
+		        Log.v(TAG, "providerName is :" + providerName);
 		        if (location != null) {
 					Log.v(TAG, "经纬度：" + location.getLatitude() + "   "
 							+ location.getLongitude());
@@ -87,7 +110,7 @@ public class MainActivity extends ActionBarActivity {
 //		        locationManager.requestLocationUpdates(providerName, 100 * 1000, 500,  
 //		                locationListener);
 		        
-		        locationManager.requestLocationUpdates(providerName, 1 * 1000, 1,  
+		        locationManager.requestLocationUpdates(providerName, 1 * 1000, 0,  
 		                locationListener);
 			};
 		});
@@ -154,13 +177,80 @@ public class MainActivity extends ActionBarActivity {
 		
 		@Override
 		public void onLocationChanged(Location location) {
-			 Log.v(TAG, "经纬度：" + location.getLatitude() + "   " + location.getLongitude());
-			 displayTextView.setText("经纬度：" + location.getLatitude() + "   " + location.getLongitude());
-			 Toast.makeText(MainActivity.this, "位置改变了::::::::::::" + locationDatas.size(), 3000).show();
-			locationDatas.add(new LocationData(location.getLatitude(), location
-					.getLongitude(), new   java.util.Date()));
+			Log.v(TAG,
+					"经纬度：" + location.getLatitude() + "   "
+							+ location.getLongitude());
+			displayTextView.setText("经纬度"+jsonArray.length() + "：" + location.getLatitude() + "   "
+					+ location.getLongitude() );
+			Toast.makeText(MainActivity.this,
+					"位置改变了::::::::::::" + jsonArray.length(), 3000).show();
+			JSONObject jsonObject = new JSONObject();
+			try {
+				jsonObject.put("latitude", location.getLatitude());
+				jsonObject.put("longitude", location.getLongitude());
+				jsonObject.put("collectionDate", new java.util.Date());
+			} catch (JSONException e) {
+				e.printStackTrace();
+			}
+			jsonArray.put(jsonObject);
+			if (jsonArray.length() >= SAVE_DATE_LENGTH) {
+				new Thread(new Runnable() {
+					@Override
+					public void run() {
+						 postDataToNetwork();
+					}
+				}).start();
+				
+			}
+
 		}
+		
 	};
+
+	private void postDataToNetwork() {
+		String jsonStr = jsonArray.toString();
+		System.out.println("上传数据" + jsonStr);
+		
+		Map<String, String> map = new HashMap<String, String>();
+		map.put("userName", jsonStr);
+		
+		DefaultHttpClient httpClient = new DefaultHttpClient();
+		HttpPost post = new HttpPost("http://192.168.1.112:8080/Track/testAndroid.do");
+		//如果为get请求数据， 这里可以使用HttpGet
+		
+		List<BasicNameValuePair> postData = new ArrayList<BasicNameValuePair>();
+		for(Map.Entry<String, String> entry : map.entrySet()){
+			postData.add(new BasicNameValuePair(entry.getKey(),
+					entry.getValue()));
+		}
+		
+		try {
+			UrlEncodedFormEntity entity = new UrlEncodedFormEntity(
+					postData, HTTP.UTF_8);
+			post.setEntity(entity);
+			
+			HttpResponse response = httpClient.execute(post);
+			
+			HttpEntity httpEntity = response.getEntity();
+			InputStream is = httpEntity.getContent();
+			
+			StringBuffer sb = new StringBuffer();
+			BufferedReader br = new BufferedReader(new InputStreamReader(is));
+			String line = "";
+			while ((line = br.readLine()) != null) {
+				sb.append(line);
+			}
+			System.out.println(sb.toString());
+			Log.v(TAG, sb.toString());
+		} catch (UnsupportedEncodingException e) {
+			e.printStackTrace();
+		} catch (ClientProtocolException e) {
+			e.printStackTrace();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		
+	}
 	private void showNotification() {
 		// 创建一个NotificationManager的引用
 		Context context=getBaseContext();
