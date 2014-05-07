@@ -7,7 +7,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.UnsupportedEncodingException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -188,7 +190,9 @@ public class MainActivity extends ActionBarActivity {
 			try {
 				jsonObject.put("latitude", location.getLatitude());
 				jsonObject.put("longitude", location.getLongitude());
-				jsonObject.put("collectionDate", new java.util.Date());
+				Date date = new Date();
+				SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd hh:mm:ss");
+				jsonObject.put("collectionDate", sdf.format(date));
 			} catch (JSONException e) {
 				e.printStackTrace();
 			}
