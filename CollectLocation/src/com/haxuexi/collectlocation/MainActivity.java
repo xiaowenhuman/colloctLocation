@@ -1,45 +1,21 @@
 package com.haxuexi.collectlocation;
 
-
-
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.UnsupportedEncodingException;
-import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
-import org.apache.http.HttpEntity;
-import org.apache.http.HttpResponse;
-import org.apache.http.client.ClientProtocolException;
-import org.apache.http.client.entity.UrlEncodedFormEntity;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.impl.client.DefaultHttpClient;
-import org.apache.http.message.BasicNameValuePair;
-import org.apache.http.protocol.HTTP;
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
+import com.haxuexi.utils.DistanceUtil;
 
 import android.support.v7.app.ActionBarActivity;
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.ServiceConnection;
 import android.graphics.Color;
-import android.location.Criteria;
-import android.location.Location;
-import android.location.LocationListener;
 import android.location.LocationManager;
-import android.location.LocationProvider;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.IBinder;
+import android.os.Message;
 import android.util.Log;
 import android.view.View;
 import android.view.View.OnClickListener;
@@ -52,14 +28,16 @@ public class MainActivity extends ActionBarActivity {
 
 	private Button collectLocationBtnButton = null;
 	private Button stopCollectLocationBtn = null;
+	Button distanceBtn = null;
 
 	private TextView displayTextView = null;
-    private LocationManager locationManager = null;
     
-    JSONArray jsonArray = new JSONArray();
+    private TrackService mService;
+    private static final int REFRESH_STRING = 1;
+    
+	
     private static final String URL_PATH = "http://192.168.1.100:8080/Track/isLoginCheck.do";
     
-    private static final int SAVE_DATE_LENGTH = 5;
 	
 	private static final String TAG = "MainActivity";
 	@Override
@@ -67,54 +45,18 @@ public class MainActivity extends ActionBarActivity {
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_main);
 		
-		String serviceName = Context.LOCATION_SERVICE;
-		// »ñÈ¡Î»ÖÃ¹ÜÀí·þÎñ
-		locationManager = (LocationManager) getSystemService(serviceName); 
-       
 //		openGPSSettings();
 		
 		collectLocationBtnButton = (Button)findViewById(R.id.collectLocation);
 		stopCollectLocationBtn = (Button)findViewById(R.id.stopCollectLocation);
 		displayTextView = (TextView)findViewById(R.id.textView);
+		distanceBtn = (Button) findViewById(R.id.distance);
 		collectLocationBtnButton.setOnClickListener(new OnClickListener() {
 			
 			@Override
 			public void onClick(View v) {
-				
-
-		       LocationProvider gpslLocationProvider =  locationManager.getProvider(LocationManager.GPS_PROVIDER);
-		       String providerName = null;
-//		        if (gpslLocationProvider != null) {
-//		        	providerName = LocationManager.GPS_PROVIDER;
-//				} else {
-			        // ²éÕÒµ½·þÎñÐÅÏ¢  
-			        Criteria criteria = new Criteria();  
-			        criteria.setAccuracy(Criteria.ACCURACY_FINE); // ¸ß¾«¶È  
-			        criteria.setAltitudeRequired(false);  
-			        criteria.setBearingRequired(false);  
-			        criteria.setCostAllowed(true);  
-			        criteria.setPowerRequirement(Criteria.POWER_LOW); // µÍ¹¦ºÄ  
-			  
-			        providerName = locationManager.getBestProvider(criteria, true); // »ñÈ¡GPSÐÅÏ¢  
-//				}
-			    
-		        Location location = locationManager.getLastKnownLocation(providerName);
-		        
-		        Log.v(TAG, "providerName is :" + providerName);
-		        if (location != null) {
-					Log.v(TAG, "¾­Î³¶È£º" + location.getLatitude() + "   "
-							+ location.getLongitude());
-					Log.v(TAG, "ÏÖÔÚ¿ªÊ¼²É¼¯ÐÅÏ¢");
-					displayTextView.setText("¸Ä±äÎÄ×Ö");
-				}
-				
-		        
-//		        locationManager.requestLocationUpdates(providerName, 100 * 1000, 500,  
-//		                locationListener);
-		        
-		        locationManager.requestLocationUpdates(providerName, 1 * 1000, 0,  
-		                locationListener);
-			};
+		       bindStepService();
+			}
 		});
 		
 		
@@ -122,11 +64,39 @@ public class MainActivity extends ActionBarActivity {
 			
 			@Override
 			public void onClick(View v) {
-				locationManager.removeUpdates(locationListener);
+				unbindStepService();
+			}
+		});
+		
+		distanceBtn.setOnClickListener(new OnClickListener() {
+			
+			@Override
+			public void onClick(View v) {
+				double distance = 0 ;
+				double lon1=106.357011;
+				double lat1 = 29.553152;
+				double lon2 = 106.848563;
+				double lat2 = 29.557174;
+				distance = DistanceUtil.LantitudeLongitudeDist(lon1, lat1, lon2, lat2);
+				distanceBtn.setText("" + distance);
 			}
 		});
 	}
-	
+
+	private Handler mHandler = new Handler() {
+
+		@Override
+		public void handleMessage(Message msg) {
+			switch (msg.what) {
+			case REFRESH_STRING:
+				collectLocationBtnButton.setText(msg.obj.toString());
+				break;
+			default:
+				super.handleMessage(msg);
+			}
+
+		}
+	};
 
 	@Override
 	protected void onStop() {
@@ -139,7 +109,6 @@ public class MainActivity extends ActionBarActivity {
 	@Override
 	protected void onDestroy() {
 		super.onDestroy();
-		locationManager.removeUpdates(locationListener);
 	}
 
 
@@ -147,134 +116,70 @@ public class MainActivity extends ActionBarActivity {
 		LocationManager alm = (LocationManager) this
 				.getSystemService(Context.LOCATION_SERVICE);
 		if (alm.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER)) {
-			Toast.makeText(this, "GPSÄ£¿éÕý³£", Toast.LENGTH_SHORT).show();
+			Toast.makeText(this, "GPSÄ£ï¿½ï¿½ï¿½ï¿½", Toast.LENGTH_SHORT).show();
 			return;
 		}
 
-		Toast.makeText(this, "Çë¿ªÆôGPS£¡", Toast.LENGTH_SHORT).show();
+		Toast.makeText(this, "ï¿½ë¿ªï¿½ï¿½GPSï¿½ï¿½", Toast.LENGTH_SHORT).show();
 		Intent intent = new Intent(Settings.ACTION_SECURITY_SETTINGS);
-		startActivityForResult(intent, 0); // ´ËÎªÉèÖÃÍê³Éºó·µ»Øµ½»ñÈ¡½çÃæ
+		startActivityForResult(intent, 0); // ï¿½ï¿½Îªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Éºó·µ»Øµï¿½ï¿½ï¿½È¡ï¿½ï¿½ï¿½ï¿½
 
 	}
 	
-	LocationListener locationListener = new LocationListener() {
-		
-		@Override
-		public void onStatusChanged(String provider, int status, Bundle extras) {
-			Log.v(TAG, "StatusChanged : " + provider + status); 
-			displayTextView.setText("StatusChanged : " + provider + status);
-		}
-		
-		@Override
-		public void onProviderEnabled(String provider) {
-			 Log.v(TAG, "ProviderEnabled : " + provider); 
-			 displayTextView.setText("ProviderEnabled : " + provider);
-		}
-		
-		@Override
-		public void onProviderDisabled(String provider) {
-			 Log.v(TAG, "ProviderDisabled : " + provider);
-			 displayTextView.setText("ProviderDisabled : " + provider);
-		}
-		
-		@Override
-		public void onLocationChanged(Location location) {
-			Log.v(TAG,
-					"¾­Î³¶È£º" + location.getLatitude() + "   "
-							+ location.getLongitude());
-			displayTextView.setText("¾­Î³¶È"+jsonArray.length() + "£º" + location.getLatitude() + "   "
-					+ location.getLongitude() );
-			Toast.makeText(MainActivity.this,
-					"Î»ÖÃ¸Ä±äÁË::::::::::::" + jsonArray.length(), 3000).show();
-			JSONObject jsonObject = new JSONObject();
-			try {
-				jsonObject.put("latitude", location.getLatitude());
-				jsonObject.put("longitude", location.getLongitude());
-				Date date = new Date();
-				SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd hh:mm:ss");
-				jsonObject.put("collectionDate", sdf.format(date));
-			} catch (JSONException e) {
-				e.printStackTrace();
-			}
-			jsonArray.put(jsonObject);
-			if (jsonArray.length() >= SAVE_DATE_LENGTH) {
-				new Thread(new Runnable() {
-					@Override
-					public void run() {
-						 postDataToNetwork();
-					}
-				}).start();
-				
-			}
-
-		}
-		
-	};
-
-	private void postDataToNetwork() {
-		String jsonStr = jsonArray.toString();
-		System.out.println("ÉÏ´«Êý¾Ý" + jsonStr);
-		
-		Map<String, String> map = new HashMap<String, String>();
-		map.put("userName", jsonStr);
-		
-		DefaultHttpClient httpClient = new DefaultHttpClient();
-		HttpPost post = new HttpPost("http://192.168.1.112:8080/Track/testAndroid.do");
-		//Èç¹ûÎªgetÇëÇóÊý¾Ý£¬ ÕâÀï¿ÉÒÔÊ¹ÓÃHttpGet
-		
-		List<BasicNameValuePair> postData = new ArrayList<BasicNameValuePair>();
-		for(Map.Entry<String, String> entry : map.entrySet()){
-			postData.add(new BasicNameValuePair(entry.getKey(),
-					entry.getValue()));
-		}
-		
-		try {
-			UrlEncodedFormEntity entity = new UrlEncodedFormEntity(
-					postData, HTTP.UTF_8);
-			post.setEntity(entity);
-			
-			HttpResponse response = httpClient.execute(post);
-			
-			HttpEntity httpEntity = response.getEntity();
-			InputStream is = httpEntity.getContent();
-			
-			StringBuffer sb = new StringBuffer();
-			BufferedReader br = new BufferedReader(new InputStreamReader(is));
-			String line = "";
-			while ((line = br.readLine()) != null) {
-				sb.append(line);
-			}
-			System.out.println(sb.toString());
-			Log.v(TAG, sb.toString());
-		} catch (UnsupportedEncodingException e) {
-			e.printStackTrace();
-		} catch (ClientProtocolException e) {
-			e.printStackTrace();
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-		
+    
+	private void bindStepService() {
+		Log.i(TAG, "[SERVICE] Bind");
+		bindService(new Intent(this, TrackService.class),
+				mConnection, Context.BIND_AUTO_CREATE
+						+ Context.BIND_DEBUG_UNBIND);
 	}
+
+    private void unbindStepService() {
+        Log.i(TAG, "[SERVICE] Unbind");
+        unbindService(mConnection);
+    }
+	
+    private ServiceConnection mConnection = new ServiceConnection() {
+        public void onServiceConnected(ComponentName className, IBinder service) {
+        	mService = ((TrackService.TrackBinder)service).getService();
+        	 mService.registerCallback(mCallback);
+            Log.v(TAG, "onServiceConnected");
+        }
+
+        public void onServiceDisconnected(ComponentName className) {
+        	mService = null;
+        	Log.v(TAG, "onServiceDisconnected");
+        }
+    };
+    TrackService.ICallback mCallback = new TrackService.ICallback(){
+
+		@Override
+		public void refresh(String displaystring) {
+			mHandler.sendMessage(mHandler.obtainMessage(REFRESH_STRING, 1,1,displaystring));
+		}
+    	
+    };
+    
 	private void showNotification() {
-		// ´´½¨Ò»¸öNotificationManagerµÄÒýÓÃ
+		// ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½NotificationManagerï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 		Context context=getBaseContext();
 		NotificationManager notificationManager = (NotificationManager) 
 			context.getSystemService(android.content.Context.NOTIFICATION_SERVICE);
 		
-		// ¶¨ÒåNotificationµÄ¸÷ÖÖÊôÐÔ
+		// ï¿½ï¿½ï¿½ï¿½Notificationï¿½Ä¸ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 		Notification notification = new Notification(R.drawable.ic_launcher,
 				getString(R.string.back_app_name), System.currentTimeMillis());
-		notification.flags |= Notification.FLAG_ONGOING_EVENT; // ½«´ËÍ¨Öª·Åµ½Í¨ÖªÀ¸µÄ"Ongoing"¼´"ÕýÔÚÔËÐÐ"×éÖÐ
-		notification.flags |= Notification.FLAG_NO_CLEAR; // ±íÃ÷ÔÚµã»÷ÁËÍ¨ÖªÀ¸ÖÐµÄ"Çå³ýÍ¨Öª"ºó£¬´ËÍ¨Öª²»Çå³ý£¬¾­³£ÓëFLAG_ONGOING_EVENTÒ»ÆðÊ¹ÓÃ
+		notification.flags |= Notification.FLAG_ONGOING_EVENT; // ï¿½ï¿½ï¿½ï¿½Í¨Öªï¿½Åµï¿½Í¨Öªï¿½ï¿½ï¿½ï¿½"Ongoing"ï¿½ï¿½"ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½"ï¿½ï¿½ï¿½ï¿½
+		notification.flags |= Notification.FLAG_NO_CLEAR; // ï¿½ï¿½ï¿½ï¿½ï¿½Úµï¿½ï¿½ï¿½ï¿½Í¨Öªï¿½ï¿½ï¿½Ðµï¿½"ï¿½ï¿½ï¿½Í¨Öª"ï¿½ó£¬´ï¿½Í¨Öªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½FLAG_ONGOING_EVENTÒ»ï¿½ï¿½Ê¹ï¿½ï¿½
 		notification.flags |= Notification.FLAG_SHOW_LIGHTS;
 		notification.defaults = Notification.DEFAULT_LIGHTS;
 		notification.ledARGB = Color.BLUE;
 		notification.ledOnMS = 5000;
 				
-		// ÉèÖÃÍ¨ÖªµÄÊÂ¼þÏûÏ¢
-		CharSequence contentTitle = getString(R.string.status_bar_string); // Í¨ÖªÀ¸±êÌâ
-		CharSequence contentText = "ameyume"; // Í¨ÖªÀ¸ÄÚÈÝ
-		Intent notificationIntent = new Intent(); // µã»÷¸ÃÍ¨ÖªºóÒªÌø×ªµÄActivity
+		// ï¿½ï¿½ï¿½ï¿½Í¨Öªï¿½ï¿½ï¿½Â¼ï¿½ï¿½ï¿½Ï¢
+		CharSequence contentTitle = getString(R.string.status_bar_string); // Í¨Öªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+		CharSequence contentText = "ameyume"; // Í¨Öªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+		Intent notificationIntent = new Intent(); // ï¿½ï¿½ï¿½ï¿½ï¿½Í¨Öªï¿½ï¿½Òªï¿½ï¿½×ªï¿½ï¿½Activity
 		notificationIntent.setFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT); 
 		notificationIntent.setClass(this, this.getClass());
 		PendingIntent contentItent = PendingIntent.getActivity(context, 0,
@@ -282,7 +187,7 @@ public class MainActivity extends ActionBarActivity {
 		context.startActivity(notificationIntent);
 		notification.setLatestEventInfo(context, contentTitle, contentText,
 				contentItent);
-		// °ÑNotification´«µÝ¸øNotificationManager
+		// ï¿½ï¿½Notificationï¿½ï¿½ï¿½Ý¸ï¿½NotificationManager
 		notificationManager.notify(0, notification);
 	}
 }
