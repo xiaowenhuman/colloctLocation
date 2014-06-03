@@ -24,11 +24,16 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+
+import android.annotation.SuppressLint;
+import android.content.ContentValues;
+import android.content.Context;
+import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
 import android.location.Location;
 import android.location.LocationListener;
 import android.os.Bundle;
 import android.util.Log;
-import android.widget.Toast;
 
 public class MyLocationListener implements LocationListener {
 	String TAG = "MyLocationListener";
@@ -55,6 +60,7 @@ public class MyLocationListener implements LocationListener {
 		Log.v(TAG, "ProviderDisabled : " + provider);
 	}
 
+	@SuppressLint("SimpleDateFormat")
 	@Override
 	public void onLocationChanged(Location location) {
 		Log.v(TAG,
@@ -68,7 +74,21 @@ public class MyLocationListener implements LocationListener {
 			jsonObject.put("longitude", location.getLongitude());
 			Date date = new Date();
 			SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd hh:mm:ss");
+			
 			jsonObject.put("collectionDate", sdf.format(date));
+			
+			EventSQLiteHelper eql = new EventSQLiteHelper((Context) trackServiceDelegate);
+			SQLiteDatabase db = eql.getWritableDatabase();
+			ContentValues contentValues = new ContentValues();
+			contentValues.put(EventSQLiteHelper.LATITUDE, location.getLatitude());
+			contentValues.put(EventSQLiteHelper.LONGITUDE, location.getLongitude());
+			contentValues.put(EventSQLiteHelper.COLLECT_TIME, sdf.format(date));
+			
+			long result = db.insert(EventSQLiteHelper.EVENT_TABLE_NAME, EventSQLiteHelper.ID, contentValues);
+			Log.v(TAG, "" + result);
+			Cursor c = db.query(EventSQLiteHelper.EVENT_TABLE_NAME,
+					null, null, null, null, null, null);
+			Log.v(TAG, "" + c);
 		} catch (JSONException e) {
 			e.printStackTrace();
 		}

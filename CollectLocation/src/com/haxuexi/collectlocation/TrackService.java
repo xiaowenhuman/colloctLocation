@@ -31,13 +31,10 @@ public class TrackService extends Service implements TrackServiceDelegate{
 	public void onCreate() {
 		
 		String serviceName = Context.LOCATION_SERVICE;
-		// ��ȡλ�ù������
 		locationManager = (LocationManager) getSystemService(serviceName);
 		registLocationListener();
-		//--------------------插入站点数据结束
 		super.onCreate();
 		Log.v(TAG, "onCreate");
-		
 		
 	}
 
